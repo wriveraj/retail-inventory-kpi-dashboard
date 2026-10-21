@@ -1,0 +1,226 @@
+# DAX Measures: Retail Inventory KPI Dashboard
+
+
+Paste these into Power BI Desktop after loading the 9 CSVs from `data/`.
+Written against the exact column names in `schema.sql`: no renaming needed.
+
+## 1. Setup: do this before writing any measures
+
+**A. Create a Calendar table.** None of the fact tables share a single date
+column, so build one shared date dimension. New Table:
+
+```
+Calendar =
+CALENDAR(DATE(2025,8,1), DATE(2026,7,31))
+```
+
+Mark it as a Date Table: select the table → Table tools → "Mark as Date Table"
+→ pick the `Date` column. Then add a couple of helper columns for readability:
+
+```
+Calendar[Month] = FORMAT('Calendar'[Date], "MMM YYYY")
+Calendar[MonthStart] = DATE(YEAR('Calendar'[Date]), MONTH('Calendar'[Date]), 1)
+```
+
+**B. Build relationships to Calendar** (Model view, drag `Date` to each):
+- `Calendar[Date]` → `inventory_snapshots[snapshot_date]`
+- `Calendar[Date]` → `pickup_orders[order_date]`
+- `Calendar[Date]` → `allocations[request_date]`
+- `Calendar[Date]` → `cycle_counts[count_date]`
+- `Calendar[Date]` → `demand_history[usage_month]`
+
+All one-to-many, Calendar on the "one" side, single direction.
+
+**C. Standard dimension relationships** (should auto-detect, verify these exist):
+- `stores[district_id]` → `districts[district_id]`
+- `par_levels[store_id]` → `stores[store_id]`, `par_levels[product_id]` → `products[product_id]`
+- Same store_id/product_id pattern for `inventory_snapshots`, `pickup_orders`,
+  `allocations` (store_id via `destination_store_id`), `cycle_counts`, `demand_history`
+
+**D. Two calculated columns needed**: `par_levels` doesn't have a direct key
+into `inventory_snapshots`, so pull PAR qty across with a lookup rather than
+a relationship (avoids a compostore-key modeling headache):
+
+In `inventory_snapshots`, new column:
+```
+PAR Qty =
+LOOKUPVALUE(
+    par_levels[par_qty],
+    par_levels[store_id], inventory_snapshots[store_id],
+    par_levels[product_id], inventory_snapshots[product_id]
+)
+```
+
+In `inventory_snapshots`, new column:
+```
+Unit Cost = RELATED(products[unit_cost])
+```
+(This one *does* work as RELATED if the product_id relationship from step C
+is in place.)
+
+---
+
+## 2. Core KPI measures
+
+### Fulfillment Rate
+```
+Fulfilled Orders = CALCULATE(COUNTROWS(pickup_orders), pickup_orders[order_status] = "Fulfilled")
+
+Total Orders = COUNTROWS(pickup_orders)
+
+Fulfillment Rate = DIVIDE([Fulfilled Orders], [Total Orders])
+```
+Format as percentage. Slice by `districts[district_name]` or `stores[store_name]`.
+
+### PAR Compliance %
+```
+PAR Compliance % =
+AVERAGEX(
+    inventory_snapshots,
+    DIVIDE(inventory_snapshots[on_hand_qty], inventory_snapshots[PAR Qty])
+)
+```
+This averages each snapshot's on-hand quantity **as a percentage of its own
+PAR target**, then averages that across every store/product in the slice , 
+not a share of snapshots that happen to clear PAR (see the note below on
+why that matters). Format as percentage. Slice by `districts[district_name]`
+or `stores[store_name]`.
+
+This is the measure that shows Gulf Coast dropping from ~101% to 50% when
+you plot it by month: put it on a line chart with `Calendar[MonthStart]`
+on the x-axis and `districts[district_name]` as legend. Confirmed against
+`validate_data.py`'s Finding 2 output (`mean(on_hand_qty / par_qty)` by
+district/month, first vs. last): that script is the ground truth this
+project's 5 findings and case study are built on, so this formula is written
+to match it exactly, not the other way around.
+
+**Why not a straight compliance *rate*?** An earlier version of this measure
+counted the share of snapshots sitting at-or-above PAR:
+```
+Stores At Or Above PAR =
+CALCULATE(
+    COUNTROWS(inventory_snapshots),
+    inventory_snapshots[on_hand_qty] >= inventory_snapshots[PAR Qty]
+)
+
+Total Store-Product Snapshots = COUNTROWS(inventory_snapshots)
+
+Stores At Or Above PAR % = DIVIDE([Stores At Or Above PAR], [Total Store-Product Snapshots])
+```
+That's a legitimate, stricter metric: it tells you what fraction of
+store/product combinations are fully stocked, rather than how full the
+average one is: but on this dataset it does **not** reproduce "101% → 50%"
+(Gulf Coast actually runs from ~71% down to ~2% on that basis, since it
+counts every under-target snapshot the same regardless of how close it is).
+Keep both if you want two distinct KPI cards: just don't use them
+interchangeably and don't relabel one as the other. The case study, README,
+and `dashboard.html` all use the average-ratio version above.
+
+### Demand Variance (coefficient of variation)
+```
+Demand Avg = AVERAGE(demand_history[qty_used])
+
+Demand StDev = STDEV.P(demand_history[qty_used])
+
+Demand Variance (CV) = DIVIDE([Demand StDev], [Demand Avg])
+```
+Higher = less predictable. Sort a product-level table visual by this
+descending: Wireless Earbuds should land at the top.
+
+### Reorder Cost Exposure
+```
+PAR Gap =
+SUMX(
+    inventory_snapshots,
+    MAX(0, inventory_snapshots[PAR Qty] - inventory_snapshots[on_hand_qty])
+)
+
+Reorder Cost Exposure =
+SUMX(
+    inventory_snapshots,
+    MAX(0, inventory_snapshots[PAR Qty] - inventory_snapshots[on_hand_qty])
+        * inventory_snapshots[Unit Cost]
+)
+
+Reorder Cost Exposure (Latest Month) =
+CALCULATE(
+    [Reorder Cost Exposure],
+    FILTER(ALL('Calendar'), 'Calendar'[Date] = MAX('Calendar'[Date]))
+)
+```
+Use the "(Latest Month)" version for a headline KPI card: it forces the
+calc to the most recent snapshot regardless of what else is on the report
+page, same framing as Project 01's "$59,752 in reorder cost exposure" tile.
+
+### Cycle Count Accuracy
+```
+Cycle Count Accuracy % =
+AVERAGEX(
+    cycle_counts,
+    1 - DIVIDE(ABS(cycle_counts[actual_qty] - cycle_counts[expected_qty]), cycle_counts[expected_qty])
+)
+```
+
+### Allocation Turnaround
+```
+Allocation Turnaround (Days) =
+AVERAGEX(
+    allocations,
+    DATEDIFF(allocations[request_date], allocations[fulfilled_date], DAY)
+)
+```
+`DATEDIFF` returns blank for still-open allocations (no `fulfilled_date`),
+and `AVERAGEX` ignores blanks automatically: no extra filtering needed.
+This is the measure that shows Gulf Coast at ~8.5 days vs. ~3.0 elsewhere.
+
+---
+
+## 3. Time intelligence (this is the DAX depth that differentiates this
+project from 01/02: don't skip it)
+
+### Month-over-month change
+```
+Fulfillment Rate MoM Δ =
+VAR CurrentRate = [Fulfillment Rate]
+VAR PriorRate =
+    CALCULATE([Fulfillment Rate], DATEADD('Calendar'[Date], -1, MONTH))
+RETURN
+    CurrentRate - PriorRate
+```
+
+### Rolling 3-month average (smooths noise, good for the exposure trend line)
+```
+Reorder Cost Exposure - Rolling 3mo Avg =
+AVERAGEX(
+    DATESINPERIOD('Calendar'[Date], LASTDATE('Calendar'[Date]), -3, MONTH),
+    [Reorder Cost Exposure]
+)
+```
+
+### PAR Compliance trend vs. 12-month start (the "collapsed from 101% to 50%" stat)
+```
+PAR Compliance % - Change vs Start =
+VAR StartValue =
+    CALCULATE([PAR Compliance %], FIRSTDATE('Calendar'[Date]))
+VAR CurrentValue = [PAR Compliance %]
+RETURN
+    CurrentValue - StartValue
+```
+
+---
+
+## 4. Suggested visuals (page 1: district overview)
+
+- KPI cards across the top: `Fulfillment Rate`, `PAR Compliance %`,
+  `Reorder Cost Exposure (Latest Month)`, `Allocation Turnaround (Days)`
+- Line chart: `PAR Compliance %` by `Calendar[MonthStart]`, legend =
+  `districts[district_name]`: this is the chart that sells the whole
+  project, since Gulf Coast visibly diverges from the other three lines
+- Bar chart: `Reorder Cost Exposure` by `districts[district_name]`,
+  sorted descending
+- Table: products sorted by `Demand Variance (CV)` descending, with
+  `Demand Avg` and `Demand StDev` as supporting columns
+
+Page 2 (drill-down) can filter to a single district/store and show the
+same measures at that grain: standard Power BI drill pattern, no new DAX
+needed beyond what's above.

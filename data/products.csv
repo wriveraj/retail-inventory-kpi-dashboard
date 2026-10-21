@@ -1,0 +1,26 @@
+product_id,product_name,category,unit_cost
+1,Wireless Earbuds,Electronics,68.0
+2,55in 4K Smart TV,Electronics,389.0
+3,14in Laptop,Electronics,342.0
+4,10in Tablet,Electronics,189.0
+5,Soundbar,Electronics,118.0
+6,Smartwatch,Electronics,142.0
+7,Video Game Console,Electronics,415.0
+8,Bluetooth Speaker,Electronics,44.0
+9,Air Fryer 5qt,Small Appliances,52.0
+10,Drip Coffee Maker,Small Appliances,34.0
+11,Cordless Stick Vacuum,Small Appliances,109.0
+12,Countertop Blender,Small Appliances,38.0
+13,Microwave 1.1 cu ft,Small Appliances,71.0
+14,Space Heater,Small Appliances,29.0
+15,Paper Towels 12-Roll,Household,14.5
+16,Laundry Detergent 92oz,Household,9.25
+17,Trash Bags 13gal 80ct,Household,8.1
+18,AA Batteries 24-Pack,Household,11.4
+19,LED Light Bulbs 4-Pack,Household,6.3
+20,Disinfecting Wipes 75ct,Household,4.2
+21,Dish Soap 24oz,Household,2.95
+22,Bottled Water 24-Pack,Grocery,3.6
+23,Breakfast Cereal 12oz,Grocery,2.35
+24,Canned Soup 10.5oz,Grocery,0.95
+25,Snack Chips 8oz,Grocery,1.7

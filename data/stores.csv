@@ -1,0 +1,19 @@
+store_id,store_name,district_id,store_type,state
+1,Coastal Northeast Store 1,1,Supercenter,NY
+2,Coastal Northeast Store 2,1,Neighborhood,MA
+3,Coastal Northeast Store 3,1,Supercenter,NY
+4,Coastal Northeast Store 4,1,Supercenter,NY
+5,Coastal Northeast Store 5,1,Supercenter,CT
+6,Great Lakes Store 1,2,Neighborhood,IL
+7,Great Lakes Store 2,2,Neighborhood,IL
+8,Great Lakes Store 3,2,Neighborhood,IL
+9,Great Lakes Store 4,2,Neighborhood,OH
+10,Piedmont Store 1,3,Express,SC
+11,Piedmont Store 2,3,Neighborhood,SC
+12,Piedmont Store 3,3,Supercenter,GA
+13,Piedmont Store 4,3,Express,SC
+14,Gulf Coast Store 1,4,Supercenter,FL
+15,Gulf Coast Store 2,4,Neighborhood,LA
+16,Gulf Coast Store 3,4,Supercenter,TX
+17,Gulf Coast Store 4,4,Supercenter,LA
+18,Gulf Coast Store 5,4,Express,TX
