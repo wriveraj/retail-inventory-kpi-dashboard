@@ -1,7 +1,7 @@
 # Case Study: Retail Inventory KPI Dashboard
 
 **Tools:** Power BI · DAX · Python (pandas/numpy) · PostgreSQL (optional) · HTML/SVG
-**GitHub:** [github.com/wriveraj/sap-field-inventory-kpi-dashboard](https://github.com/wriveraj/sap-field-inventory-kpi-dashboard)
+**GitHub:** [github.com/wriveraj/retail-inventory-kpi-dashboard](https://github.com/wriveraj/retail-inventory-kpi-dashboard)
 
 ---
 
